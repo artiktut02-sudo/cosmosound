@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 void main() => runApp(const CosmoSoundApp());
@@ -41,14 +41,11 @@ class _MainScreenState extends State<MainScreen> {
 
   final String _botUrl = 'https://t.me/your_bot_name'; 
   final String _channelUrl = 'https://t.me/your_channel_name';
-  final String _supabaseUrl = 'https://bgzdbtouckpzwplbzhbn.supabase.co'; 
-  final String _supabaseKey = 'sb_publishable_yHpdNA3ZD6XY-rjxCHCayQ_NIAUZz9q'; 
-  final String _bucketName = 'music';
 
   @override
   void initState() {
     super.initState();
-    _loadTracksFromSupabase();
+    _loadTracks();
     _player.playerStateStream.listen((state) {
       if (state.processingState == ProcessingState.completed) {
         _player.pause();
@@ -58,56 +55,29 @@ class _MainScreenState extends State<MainScreen> {
     });
   }
 
-  Future<void> _loadTracksFromSupabase() async {
+  // Загружаем треки из открытого источника (SoundHelix)
+  Future<void> _loadTracks() async {
     setState(() => _isLoading = true);
-    try {
-      final url = Uri.parse('$_supabaseUrl/storage/v1/object/list/$_bucketName');
-      final response = await http.post(
-        url,
-        headers: {
-          'apikey': _supabaseKey,
-          'Authorization': 'Bearer $_supabaseKey',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          "prefix": "",
-          "limit": 100,
-          "offset": 0,
-          "sortBy": {"column": "name", "order": "asc"}
-        }),
-      );
+    // Это список проверенных бесплатных треков, которые точно играют
+    final List<Map<String, String>> freeTracks = [
+      {'title': 'SoundHelix 1', 'artist': 'Free Music', 'url': 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'},
+      {'title': 'SoundHelix 2', 'artist': 'Free Music', 'url': 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3'},
+      {'title': 'SoundHelix 3', 'artist': 'Free Music', 'url': 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3'},
+      {'title': 'SoundHelix 4', 'artist': 'Free Music', 'url': 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3'},
+      {'title': 'SoundHelix 5', 'artist': 'Free Music', 'url': 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3'},
+    ];
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body) as List;
-        setState(() {
-          _allTracks.clear();
-          for (var file in data) {
-            String fileName = file['name'].toString();
-            if (fileName.toLowerCase().endsWith('.mp3')) {
-              _allTracks.add({
-                'id': fileName,
-                'title': fileName.replaceAll('.mp3', '').replaceAll('_', ' '),
-                'artist': 'CosmoSound',
-                'audio': '$_supabaseUrl/storage/v1/object/public/$_bucketName/$fileName',
-              });
-            }
-          }
-          _isLoading = false;
-        });
-      } else {
-        setState(() => _isLoading = false);
-        _showMsg('Ошибка Supabase: ${response.statusCode}');
-      }
-    } catch (e) {
-      setState(() => _isLoading = false);
-      _showMsg('Ошибка сети: $e');
-    }
+    setState(() {
+      _allTracks.clear();
+      _allTracks.addAll(freeTracks);
+      _isLoading = false;
+    });
   }
 
   void _toggleFavorite(dynamic track) {
     setState(() {
-      if (_favorites.any((t) => t['id'] == track['id'])) {
-        _favorites.removeWhere((t) => t['id'] == track['id']);
+      if (_favorites.any((t) => t['title'] == track['title'])) {
+        _favorites.removeWhere((t) => t['title'] == track['title']);
         _showMsg('Удалено из избранного');
       } else {
         _favorites.add(track);
@@ -119,13 +89,8 @@ class _MainScreenState extends State<MainScreen> {
   Future<void> _playTrack(dynamic track) async {
     try {
       setState(() => _currentTrack = track);
-      final String? audioUrl = track['audio'];
-      if (audioUrl != null && audioUrl.isNotEmpty) {
-        await _player.setUrl(audioUrl);
-        _player.play();
-      } else {
-        _showMsg('Нет ссылки на аудио');
-      }
+      await _player.setUrl(track['url']);
+      _player.play();
       setState(() {}); 
     } catch (e) {
       _showMsg('Ошибка воспроизведения: $e');
@@ -320,26 +285,24 @@ class _MainScreenState extends State<MainScreen> {
       ),
       body: _isLoading 
           ? const Center(child: CircularProgressIndicator())
-          : _allTracks.isEmpty
-              ? const Center(child: Text('Нет треков. Загрузи mp3 в папку music на Supabase!'))
-              : ListView.builder(
-                  itemCount: _allTracks.length,
-                  itemBuilder: (context, index) {
-                    final track = _allTracks[index];
-                    final isFav = _favorites.any((t) => t['id'] == track['id']);
-                    return ListTile(
-                      title: Text(track['title'] ?? 'Без названия'),
-                      subtitle: Text(track['artist'] ?? 'Неизвестный'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(icon: Icon(isFav ? Icons.favorite : Icons.favorite_border, color: isFav ? Colors.red : null), onPressed: () => _toggleFavorite(track)),
-                          IconButton(icon: const Icon(Icons.play_arrow), onPressed: () => _playTrack(track)),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+          : ListView.builder(
+              itemCount: _allTracks.length,
+              itemBuilder: (context, index) {
+                final track = _allTracks[index];
+                final isFav = _favorites.any((t) => t['title'] == track['title']);
+                return ListTile(
+                  title: Text(track['title'] ?? 'Без названия'),
+                  subtitle: Text(track['artist'] ?? 'Неизвестный'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(icon: Icon(isFav ? Icons.favorite : Icons.favorite_border, color: isFav ? Colors.red : null), onPressed: () => _toggleFavorite(track)),
+                      IconButton(icon: const Icon(Icons.play_arrow), onPressed: () => _playTrack(track)),
+                    ],
+                  ),
+                );
+              },
+            ),
     );
   }
 
