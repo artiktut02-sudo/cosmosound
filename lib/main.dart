@@ -29,7 +29,6 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   
-  // Общее состояние для всех вкладок
   final List<dynamic> _searchTracks = [];
   final List<dynamic> _favorites = [];
   bool _isLoading = false;
@@ -91,7 +90,6 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Экраны для вкладок
     final List<Widget> _pages = [
       _buildSearchPage(),
       _buildFavoritesPage(),
@@ -112,7 +110,7 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // Вкладка "Поиск"
+  // Вкладка "Поиск" (с приветственным экраном)
   Widget _buildSearchPage() {
     return Scaffold(
       appBar: AppBar(title: const Text('CosmoSound 🚀')),
@@ -131,7 +129,28 @@ class _MainScreenState extends State<MainScreen> {
           if (_isLoading) const LinearProgressIndicator(),
           Expanded(
             child: _searchTracks.isEmpty && !_isLoading
-                ? const Center(child: Text('Введите запрос'))
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.music_note, size: 64, color: Colors.grey),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Чтобы найти трек, напиши в поиск\nнапример:',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 16, color: Colors.grey),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            children: ['lofi', 'rock', 'jazz'].map((tag) => Chip(label: Text(tag))).toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
                 : ListView.builder(
                     itemCount: _searchTracks.length,
                     itemBuilder: (context, index) {
