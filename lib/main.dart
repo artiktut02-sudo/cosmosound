@@ -15,12 +15,7 @@ class CosmoSoundApp extends StatefulWidget {
 
 class _CosmoSoundAppState extends State<CosmoSoundApp> {
   Color _themeColor = Colors.deepPurple;
-
-  void _changeTheme(Color color) {
-    setState(() {
-      _themeColor = color;
-    });
-  }
+  void _changeTheme(Color color) { setState(() { _themeColor = color; }); }
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +33,6 @@ class _CosmoSoundAppState extends State<CosmoSoundApp> {
 class MainScreen extends StatefulWidget {
   final Function(Color) onThemeChanged;
   final Color currentTheme;
-
   const MainScreen({super.key, required this.onThemeChanged, required this.currentTheme});
 
   @override
@@ -48,89 +42,82 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   
-  final List<dynamic> _searchTracks = [];
+  final List<dynamic> _allTracks = [];
   final List<dynamic> _favorites = [];
   bool _isLoading = false;
-  final AudioPlayer _player = AudioPlayer();
   
+  final AudioPlayer _player = AudioPlayer();
+  dynamic _currentTrack; 
+
   bool _isPremium = false; 
   bool _isAdmin = false; 
   
   final String _botUrl = 'https://t.me/your_bot_name'; 
   final String _channelUrl = 'https://t.me/your_channel_name';
 
+  // --- ТВОИ ДАННЫЕ ИЗ SUPABASE ---
+  final String _supabaseUrl = 'https://bgzdbtouckpzwplbzhbn.supabase.co'; 
+  final String _supabaseKey = 'sb_publishable_yHpdNA3ZD6XY-rjxCHCayQ_NIAUZz9q'; 
+  final String _bucketName = 'music';
+
   @override
   void initState() {
     super.initState();
-    _loadTrending();
+    _loadTracksFromSupabase();
+    
+    _player.playerStateStream.listen((state) {
+      if (state.processingState == ProcessingState.completed) {
+        _player.pause();
+        _player.seek(Duration.zero);
+        setState(() {}); 
+      }
+    });
   }
 
-  // Загрузка популярных треков через MusicBrainz (без ключа)
-  Future<void> _loadTrending() async {
+  Future<void> _loadTracksFromSupabase() async {
     setState(() => _isLoading = true);
     try {
-      // Ищем популярные записи (например, rock)
-      final url = Uri.parse('https://musicbrainz.org/ws/2/recording?query=rock&limit=20&fmt=json');
-      final response = await http.get(url, headers: {
-        'User-Agent': 'CosmoSound/1.0 ( test@example.com )' // MusicBrainz требует User-Agent
-      }).timeout(const Duration(seconds: 10));
+      final url = Uri.parse('$_supabaseUrl/storage/v1/object/list/$_bucketName');
       
+      final response = await http.post(
+        url,
+        headers: {
+          'apikey': _supabaseKey,
+          'Authorization': 'Bearer $_supabaseKey',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          "prefix": "",
+          "limit": 100,
+          "offset": 0,
+          "sortBy": {"column": "name", "order": "asc"}
+        }),
+      );
+
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+        final data = json.decode(response.body) as List;
         setState(() {
-          _searchTracks.clear();
-          // Парсим записи
-          final recordings = data['recordings'] as List? ?? [];
-          for (var rec in recordings) {
-            _searchTracks.add({
-              'id': rec['id'],
-              'title': rec['title'] ?? 'Без названия',
-              'artist': rec['artist-credit']?[0]?['name'] ?? 'Неизвестный',
-            });
+          _allTracks.clear();
+          for (var file in data) {
+            String fileName = file['name'].toString();
+            if (fileName.toLowerCase().endsWith('.mp3')) {
+              _allTracks.add({
+                'id': fileName,
+                'title': fileName.replaceAll('.mp3', '').replaceAll('_', ' '),
+                'artist': 'CosmoSound',
+                'audio': '$_supabaseUrl/storage/v1/object/public/$_bucketName/$fileName',
+              });
+            }
           }
           _isLoading = false;
         });
       } else {
         setState(() => _isLoading = false);
-        _showMsg('Ошибка MusicBrainz: ${response.statusCode}');
+        _showMsg('Ошибка Supabase: ${response.statusCode}');
       }
     } catch (e) {
       setState(() => _isLoading = false);
       _showMsg('Ошибка сети: $e');
-    }
-  }
-
-  Future<void> _search(String query) async {
-    if (query.isEmpty) return;
-    setState(() => _isLoading = true);
-    try {
-      final url = Uri.parse('https://musicbrainz.org/ws/2/recording?query=$query&limit=20&fmt=json');
-      final response = await http.get(url, headers: {
-        'User-Agent': 'CosmoSound/1.0 ( test@example.com )'
-      }).timeout(const Duration(seconds: 10));
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        setState(() {
-          _searchTracks.clear();
-          final recordings = data['recordings'] as List? ?? [];
-          for (var rec in recordings) {
-            _searchTracks.add({
-              'id': rec['id'],
-              'title': rec['title'] ?? 'Без названия',
-              'artist': rec['artist-credit']?[0]?['name'] ?? 'Неизвестный',
-            });
-          }
-          _isLoading = false;
-        });
-        if (_searchTracks.isEmpty) _showMsg('Ничего не найдено');
-      } else {
-        setState(() => _isLoading = false);
-        _showMsg('Ошибка сервера: ${response.statusCode}');
-      }
-    } catch (e) {
-      setState(() => _isLoading = false);
-      _showMsg('Ошибка поиска: $e');
     }
   }
 
@@ -146,18 +133,29 @@ class _MainScreenState extends State<MainScreen> {
     });
   }
 
-  // Воспроизведение (пока играем демо-звук, так как MusicBrainz не хранит mp3)
   Future<void> _playTrack(dynamic track) async {
     try {
-      // Временная заглушка: играем короткий демо-трек, чтобы проверить работу плеера
-      // Позже ты сможешь заменить это на свои mp3
-      const demoUrl = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
-      await _player.setUrl(demoUrl);
-      _player.play();
-      _showMsg('Играет демо: ${track['title']}');
+      setState(() => _currentTrack = track);
+      final String? audioUrl = track['audio'];
+      if (audioUrl != null && audioUrl.isNotEmpty) {
+        await _player.setUrl(audioUrl);
+        _player.play();
+      } else {
+        _showMsg('Нет ссылки на аудио');
+      }
+      setState(() {}); 
     } catch (e) {
       _showMsg('Ошибка воспроизведения: $e');
     }
+  }
+
+  void _togglePlayPause() {
+    if (_player.playing) { _player.pause(); } 
+    else {
+      if (_player.processingState == ProcessingState.completed) { _player.seek(Duration.zero); }
+      _player.play();
+    }
+    setState(() {});
   }
 
   void _showMsg(String msg) {
@@ -180,36 +178,24 @@ class _MainScreenState extends State<MainScreen> {
               ElevatedButton.icon(
                 onPressed: () async {
                   final url = Uri.parse(_botUrl);
-                  if (await canLaunchUrl(url)) {
-                    await launchUrl(url);
-                  } else {
-                    _showMsg('Не удалось открыть Telegram');
-                  }
+                  if (await canLaunchUrl(url)) { await launchUrl(url); } 
+                  else { _showMsg('Не удалось открыть Telegram'); }
                 },
                 icon: const Icon(Icons.send),
                 label: const Text('Купить в Telegram'),
               ),
               const SizedBox(height: 16),
               const Text('Уже купил? Введи код:'),
-              TextField(
-                controller: _codeController,
-                decoration: const InputDecoration(hintText: 'Твой код'),
-              ),
+              TextField(controller: _codeController, decoration: const InputDecoration(hintText: 'Твой код')),
             ],
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Отмена'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
             TextButton(
               onPressed: () {
                 final input = _codeController.text.trim();
                 if (input == 'CosmoAdmin2077') {
-                  setState(() {
-                    _isAdmin = true;
-                    _isPremium = true; 
-                  });
+                  setState(() { _isAdmin = true; _isPremium = true; });
                   Navigator.pop(context);
                   _showAdminPanel();
                   return;
@@ -218,9 +204,7 @@ class _MainScreenState extends State<MainScreen> {
                   setState(() => _isPremium = true);
                   Navigator.pop(context);
                   _showMsg('Премиум активирован! 👑');
-                } else {
-                  _showMsg('Неверный код');
-                }
+                } else { _showMsg('Неверный код'); }
               },
               child: const Text('Активировать'),
             ),
@@ -240,20 +224,13 @@ class _MainScreenState extends State<MainScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                setState(() {
-                  _favorites.clear();
-                  _searchTracks.clear();
-                  _isPremium = true;
-                });
+                setState(() { _favorites.clear(); _isPremium = true; });
                 Navigator.pop(context);
                 _showMsg('Все данные сброшены, Премиум включен!');
               },
               child: const Text('Сбросить всё + Включить Премиум'),
             ),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Закрыть'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Закрыть')),
           ],
         );
       },
@@ -280,10 +257,7 @@ class _MainScreenState extends State<MainScreen> {
           ListTile(
             leading: const Icon(Icons.palette),
             title: const Text('Оформление'),
-            onTap: () {
-              Navigator.pop(context);
-              _showThemeDialog();
-            },
+            onTap: () { Navigator.pop(context); _showThemeDialog(); },
           ),
           const Divider(),
           ListTile(
@@ -291,9 +265,7 @@ class _MainScreenState extends State<MainScreen> {
             title: const Text('Telegram проект'),
             onTap: () async {
               final url = Uri.parse(_channelUrl);
-              if (await canLaunchUrl(url)) {
-                await launchUrl(url);
-              }
+              if (await canLaunchUrl(url)) { await launchUrl(url); }
             },
           ),
           ListTile(
@@ -306,9 +278,7 @@ class _MainScreenState extends State<MainScreen> {
                 applicationName: 'CosmoSound',
                 applicationVersion: '1.0',
                 applicationIcon: const Icon(Icons.music_note, size: 40),
-                children: [
-                  const Text('Твое космическое музыкальное пространство. Слушай, лайкай и создавай свою вселенную.'),
-                ],
+                children: const [Text('Твое космическое музыкальное пространство.')],
               );
             },
           ),
@@ -333,12 +303,7 @@ class _MainScreenState extends State<MainScreen> {
               _buildColorOption(Colors.green, 'Лес'),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Закрыть'),
-            ),
-          ],
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Закрыть'))],
         );
       },
     );
@@ -357,21 +322,41 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  Widget _buildMiniPlayer() {
+    if (_currentTrack == null) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(color: Colors.grey[900], border: Border(top: BorderSide(color: Colors.grey[800]!))),
+      child: Row(
+        children: [
+          const Icon(Icons.music_note, color: Colors.white70),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_currentTrack['title'] ?? 'Без названия', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(_currentTrack['artist'] ?? 'Неизвестный', style: const TextStyle(color: Colors.grey, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+          IconButton(icon: Icon(_player.playing ? Icons.pause : Icons.play_arrow, size: 32), onPressed: _togglePlayPause),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final List<Widget> _pages = [
-      _buildSearchPage(),
-      _buildFavoritesPage(),
-      _buildUniversePage(),
-    ];
-
+    final List<Widget> _pages = [_buildHomePage(), _buildFavoritesPage(), _buildUniversePage()];
     return Scaffold(
-      body: _pages[_currentIndex],
+      body: Column(children: [Expanded(child: _pages[_currentIndex]), _buildMiniPlayer()]),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Поиск'),
+          BottomNavigationBarItem(icon: Icon(Icons.music_note), label: 'Музыка'),
           BottomNavigationBarItem(icon: Icon(Icons.favorite), label: 'Избранное'),
           BottomNavigationBarItem(icon: Icon(Icons.auto_awesome), label: 'Вселенная'),
         ],
@@ -379,86 +364,39 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildSearchPage() {
+  Widget _buildHomePage() {
     return Scaffold(
       drawer: _buildDrawer(),
       appBar: AppBar(
         title: const Text('CosmoSound 🚀'),
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
-        ),
+        leading: Builder(builder: (context) => IconButton(icon: const Icon(Icons.menu), onPressed: () => Scaffold.of(context).openDrawer())),
         actions: [
-          if (_isAdmin)
-            const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: Icon(Icons.security, color: Colors.green),
-            ),
-          IconButton(
-            icon: Icon(_isPremium ? Icons.workspace_premium : Icons.star_border, color: _isPremium ? Colors.amber : null),
-            onPressed: _showPremiumDialog,
-          ),
+          if (_isAdmin) const Padding(padding: EdgeInsets.all(8.0), child: Icon(Icons.security, color: Colors.green)),
+          IconButton(icon: Icon(_isPremium ? Icons.workspace_premium : Icons.star_border, color: _isPremium ? Colors.amber : null), onPressed: _showPremiumDialog),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              decoration: const InputDecoration(
-                hintText: 'Найти трек...',
-                border: OutlineInputBorder(),
-              ),
-              onSubmitted: _search,
-            ),
-          ),
-          if (_isLoading) const LinearProgressIndicator(),
-          Expanded(
-            child: _searchTracks.isEmpty && !_isLoading
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.music_note, size: 64, color: Colors.grey),
-                        const SizedBox(height: 16),
-                        const Text('Популярное сейчас (MusicBrainz)', style: TextStyle(fontSize: 16)),
-                        const SizedBox(height: 8),
-                        ElevatedButton(
-                          onPressed: _loadTrending,
-                          child: const Text('Обновить'),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: _searchTracks.length,
-                    itemBuilder: (context, index) {
-                      final track = _searchTracks[index];
-                      final isFav = _favorites.any((t) => t['id'] == track['id']);
-                      return ListTile(
-                        title: Text(track['title'] ?? 'Без названия'),
-                        subtitle: Text(track['artist'] ?? 'Неизвестный'),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: Icon(isFav ? Icons.favorite : Icons.favorite_border, color: isFav ? Colors.red : null),
-                              onPressed: () => _toggleFavorite(track),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.play_arrow),
-                              onPressed: () => _playTrack(track),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
+      body: _isLoading 
+          ? const Center(child: CircularProgressIndicator())
+          : _allTracks.isEmpty
+              ? const Center(child: Text('Нет треков. Загрузи mp3 в папку music на Supabase!'))
+              : ListView.builder(
+                  itemCount: _allTracks.length,
+                  itemBuilder: (context, index) {
+                    final track = _allTracks[index];
+                    final isFav = _favorites.any((t) => t['id'] == track['id']);
+                    return ListTile(
+                      title: Text(track['title'] ?? 'Без названия'),
+                      subtitle: Text(track['artist'] ?? 'Неизвестный'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(icon: Icon(isFav ? Icons.favorite : Icons.favorite_border, color: isFav ? Colors.red : null), onPressed: () => _toggleFavorite(track)),
+                          IconButton(icon: const Icon(Icons.play_arrow), onPressed: () => _playTrack(track)),
+                        ],
+                      ),
+                    );
+                  },
+                ),
     );
   }
 
@@ -466,7 +404,7 @@ class _MainScreenState extends State<MainScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Избранное ❤️')),
       body: _favorites.isEmpty
-          ? const Center(child: Text('Пока пусто. Лайкай треки в поиске!'))
+          ? const Center(child: Text('Пока пусто. Лайкай треки!'))
           : ListView.builder(
               itemCount: _favorites.length,
               itemBuilder: (context, index) {
@@ -474,10 +412,7 @@ class _MainScreenState extends State<MainScreen> {
                 return ListTile(
                   title: Text(track['title'] ?? 'Без названия'),
                   subtitle: Text(track['artist'] ?? 'Неизвестный'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.play_arrow),
-                    onPressed: () => _playTrack(track),
-                  ),
+                  trailing: IconButton(icon: const Icon(Icons.play_arrow), onPressed: () => _playTrack(track)),
                 );
               },
             ),
@@ -491,10 +426,7 @@ class _MainScreenState extends State<MainScreen> {
           ? const Center(child: Text('Добавь треки в избранное, чтобы создать свою вселенную'))
           : Column(
               children: [
-                const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text('Твой персональный плейлист', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                ),
+                const Padding(padding: EdgeInsets.all(16.0), child: Text('Твой персональный плейлист', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
                 Expanded(
                   child: ListView.builder(
                     itemCount: _favorites.length,
