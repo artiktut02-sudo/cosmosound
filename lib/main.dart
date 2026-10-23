@@ -14,7 +14,6 @@ class CosmoSoundApp extends StatefulWidget {
 }
 
 class _CosmoSoundAppState extends State<CosmoSoundApp> {
-  // Выбранный цвет темы
   Color _themeColor = Colors.deepPurple;
 
   void _changeTheme(Color color) {
@@ -58,7 +57,15 @@ class _MainScreenState extends State<MainScreen> {
   bool _isAdmin = false; 
   
   final String _botUrl = 'https://t.me/your_bot_name'; 
-  final String _channelUrl = 'https://t.me/your_channel_name'; // Ссылка на твой канал
+  final String _channelUrl = 'https://t.me/your_channel_name';
+
+  // Список серверов для надежности
+  final List<String> _apiHosts = [
+    'https://discoveryprovider.audius.co',
+    'https://discoveryprovider2.audius.co',
+    'https://discoveryprovider3.audius.co',
+    'https://api.audius.co',
+  ];
 
   @override
   void initState() {
@@ -66,53 +73,50 @@ class _MainScreenState extends State<MainScreen> {
     _loadTrending();
   }
 
+  Future<dynamic> _fetchFromAudius(String endpoint) async {
+    for (String host in _apiHosts) {
+      try {
+        final url = Uri.parse('$host$endpoint');
+        final response = await http.get(url).timeout(const Duration(seconds: 5));
+        if (response.statusCode == 200) {
+          return json.decode(response.body);
+        }
+      } catch (e) {
+        continue; 
+      }
+    }
+    throw Exception('Все серверы Audius недоступны');
+  }
+
   Future<void> _loadTrending() async {
     setState(() => _isLoading = true);
-    final String apiHost = 'https://discoveryprovider.audius.co';
-    final url = Uri.parse('$apiHost/v1/tracks/trending?app_name=CosmoSound&limit=20');
-
     try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        setState(() {
-          _searchTracks.clear();
-          _searchTracks.addAll(data['data'] ?? []);
-          _isLoading = false;
-        });
-      } else {
-        setState(() => _isLoading = false);
-        _showMsg('Ошибка сервера: ${response.statusCode}');
-      }
+      final data = await _fetchFromAudius('/v1/tracks/trending?app_name=CosmoSound&limit=20');
+      setState(() {
+        _searchTracks.clear();
+        _searchTracks.addAll(data['data'] ?? []);
+        _isLoading = false;
+      });
     } catch (e) {
       setState(() => _isLoading = false);
-      _showMsg('Ошибка сети: $e');
+      _showMsg('Не удалось загрузить музыку. Проверь интернет.');
     }
   }
 
   Future<void> _search(String query) async {
     if (query.isEmpty) return;
     setState(() => _isLoading = true);
-    final String apiHost = 'https://discoveryprovider.audius.co';
-    final url = Uri.parse('$apiHost/v1/tracks/search?query=$query&app_name=CosmoSound');
-
     try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        setState(() {
-          _searchTracks.clear();
-          _searchTracks.addAll(data['data'] ?? []);
-          _isLoading = false;
-        });
-        if (_searchTracks.isEmpty) _showMsg('Ничего не найдено');
-      } else {
-        setState(() => _isLoading = false);
-        _showMsg('Ошибка сервера: ${response.statusCode}');
-      }
+      final data = await _fetchFromAudius('/v1/tracks/search?query=$query&app_name=CosmoSound');
+      setState(() {
+        _searchTracks.clear();
+        _searchTracks.addAll(data['data'] ?? []);
+        _isLoading = false;
+      });
+      if (_searchTracks.isEmpty) _showMsg('Ничего не найдено');
     } catch (e) {
       setState(() => _isLoading = false);
-      _showMsg('Ошибка сети: $e');
+      _showMsg('Ошибка поиска. Попробуй еще раз.');
     }
   }
 
@@ -130,10 +134,26 @@ class _MainScreenState extends State<MainScreen> {
 
   Future<void> _playTrack(dynamic track) async {
     try {
-      final String apiHost = 'https://discoveryprovider.audius.co';
-      final url = Uri.parse('$apiHost/v1/tracks/${track['id']}/stream?app_name=CosmoSound');
-      await _player.setUrl(url.toString());
-      _player.play();
+      String? streamUrl;
+      for (String host in _apiHosts) {
+        try {
+          final url = Uri.parse('$host/v1/tracks/${track['id']}/stream?app_name=CosmoSound');
+          final response = await http.head(url).timeout(const Duration(seconds: 3));
+          if (response.statusCode == 200 || response.statusCode == 302) {
+            streamUrl = url.toString();
+            break;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+      
+      if (streamUrl != null) {
+        await _player.setUrl(streamUrl);
+        _player.play();
+      } else {
+        _showMsg('Не удалось найти рабочий сервер');
+      }
     } catch (e) {
       _showMsg('Ошибка воспроизведения: $e');
     }
@@ -146,7 +166,6 @@ class _MainScreenState extends State<MainScreen> {
 
   void _showPremiumDialog() {
     final TextEditingController _codeController = TextEditingController();
-
     showDialog(
       context: context,
       builder: (context) {
@@ -185,7 +204,6 @@ class _MainScreenState extends State<MainScreen> {
             TextButton(
               onPressed: () {
                 final input = _codeController.text.trim();
-                
                 if (input == 'CosmoAdmin2077') {
                   setState(() {
                     _isAdmin = true;
@@ -195,7 +213,6 @@ class _MainScreenState extends State<MainScreen> {
                   _showAdminPanel();
                   return;
                 }
-
                 if (input == 'PROMO') {
                   setState(() => _isPremium = true);
                   Navigator.pop(context);
@@ -264,7 +281,7 @@ class _MainScreenState extends State<MainScreen> {
             leading: const Icon(Icons.palette),
             title: const Text('Оформление'),
             onTap: () {
-              Navigator.pop(context); // Закрываем меню
+              Navigator.pop(context);
               _showThemeDialog();
             },
           ),
@@ -287,7 +304,7 @@ class _MainScreenState extends State<MainScreen> {
               showAboutDialog(
                 context: context,
                 applicationName: 'CosmoSound',
-                applicationVersion: '1.0.0',
+                applicationVersion: '1.0',
                 applicationIcon: const Icon(Icons.music_note, size: 40),
                 children: [
                   const Text('Твое космическое музыкальное пространство. Слушай, лайкай и создавай свою вселенную.'),
@@ -300,7 +317,6 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // Окно выбора цвета
   void _showThemeDialog() {
     showDialog(
       context: context,
@@ -350,7 +366,7 @@ class _MainScreenState extends State<MainScreen> {
     ];
 
     return Scaffold(
-      drawer: _buildDrawer(), // Добавили боковое меню
+      drawer: _buildDrawer(), // Вот тут подключается меню
       body: _pages[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
@@ -368,6 +384,13 @@ class _MainScreenState extends State<MainScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('CosmoSound 🚀'),
+        // ВОТ ОНО! Добавляем иконку меню (три палочки) слева
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         actions: [
           if (_isAdmin)
             const Padding(
@@ -490,5 +513,7 @@ class _MainScreenState extends State<MainScreen> {
               ],
             ),
     );
+  }
+}
   }
 }
