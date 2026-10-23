@@ -258,6 +258,7 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  // Боковое меню (Drawer) теперь вызывается изнутри страницы поиска
   Widget _buildDrawer() {
     return Drawer(
       child: ListView(
@@ -279,7 +280,7 @@ class _MainScreenState extends State<MainScreen> {
             leading: const Icon(Icons.palette),
             title: const Text('Оформление'),
             onTap: () {
-              Navigator.pop(context);
+              Navigator.pop(context); // Закрываем меню
               _showThemeDialog();
             },
           ),
@@ -364,7 +365,7 @@ class _MainScreenState extends State<MainScreen> {
     ];
 
     return Scaffold(
-      drawer: _buildDrawer(),
+      // Убрали общий drawer отсюда
       body: _pages[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
@@ -379,9 +380,12 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildSearchPage() {
+    // Возвращаем Scaffold с Drawer прямо здесь
     return Scaffold(
+      drawer: _buildDrawer(), // <-- ВОТ ТУТ МЕНЮ ДЛЯ ЭКРАНА ПОИСКА
       appBar: AppBar(
         title: const Text('CosmoSound 🚀'),
+        // Кнопку "три палочки" оставили
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
