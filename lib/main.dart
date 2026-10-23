@@ -59,46 +59,44 @@ class _MainScreenState extends State<MainScreen> {
   final String _botUrl = 'https://t.me/your_bot_name'; 
   final String _channelUrl = 'https://t.me/your_channel_name';
 
-  final List<String> _apiHosts = [
-    'https://discoveryprovider.audius.co',
-    'https://discoveryprovider2.audius.co',
-    'https://discoveryprovider3.audius.co',
-    'https://api.audius.co',
-  ];
-
   @override
   void initState() {
     super.initState();
     _loadTrending();
   }
 
-  Future<dynamic> _fetchFromAudius(String endpoint) async {
-    for (String host in _apiHosts) {
-      try {
-        final url = Uri.parse('$host$endpoint');
-        final response = await http.get(url).timeout(const Duration(seconds: 5));
-        if (response.statusCode == 200) {
-          return json.decode(response.body);
-        }
-      } catch (e) {
-        continue; 
-      }
-    }
-    throw Exception('Все серверы Audius недоступны');
-  }
-
+  // Загрузка популярных треков через MusicBrainz (без ключа)
   Future<void> _loadTrending() async {
     setState(() => _isLoading = true);
     try {
-      final data = await _fetchFromAudius('/v1/tracks/trending?app_name=CosmoSound&limit=20');
-      setState(() {
-        _searchTracks.clear();
-        _searchTracks.addAll(data['data'] ?? []);
-        _isLoading = false;
-      });
+      // Ищем популярные записи (например, rock)
+      final url = Uri.parse('https://musicbrainz.org/ws/2/recording?query=rock&limit=20&fmt=json');
+      final response = await http.get(url, headers: {
+        'User-Agent': 'CosmoSound/1.0 ( test@example.com )' // MusicBrainz требует User-Agent
+      }).timeout(const Duration(seconds: 10));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          _searchTracks.clear();
+          // Парсим записи
+          final recordings = data['recordings'] as List? ?? [];
+          for (var rec in recordings) {
+            _searchTracks.add({
+              'id': rec['id'],
+              'title': rec['title'] ?? 'Без названия',
+              'artist': rec['artist-credit']?[0]?['name'] ?? 'Неизвестный',
+            });
+          }
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = false);
+        _showMsg('Ошибка MusicBrainz: ${response.statusCode}');
+      }
     } catch (e) {
       setState(() => _isLoading = false);
-      _showMsg('Не удалось загрузить музыку. Проверь интернет.');
+      _showMsg('Ошибка сети: $e');
     }
   }
 
@@ -106,16 +104,33 @@ class _MainScreenState extends State<MainScreen> {
     if (query.isEmpty) return;
     setState(() => _isLoading = true);
     try {
-      final data = await _fetchFromAudius('/v1/tracks/search?query=$query&app_name=CosmoSound');
-      setState(() {
-        _searchTracks.clear();
-        _searchTracks.addAll(data['data'] ?? []);
-        _isLoading = false;
-      });
-      if (_searchTracks.isEmpty) _showMsg('Ничего не найдено');
+      final url = Uri.parse('https://musicbrainz.org/ws/2/recording?query=$query&limit=20&fmt=json');
+      final response = await http.get(url, headers: {
+        'User-Agent': 'CosmoSound/1.0 ( test@example.com )'
+      }).timeout(const Duration(seconds: 10));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          _searchTracks.clear();
+          final recordings = data['recordings'] as List? ?? [];
+          for (var rec in recordings) {
+            _searchTracks.add({
+              'id': rec['id'],
+              'title': rec['title'] ?? 'Без названия',
+              'artist': rec['artist-credit']?[0]?['name'] ?? 'Неизвестный',
+            });
+          }
+          _isLoading = false;
+        });
+        if (_searchTracks.isEmpty) _showMsg('Ничего не найдено');
+      } else {
+        setState(() => _isLoading = false);
+        _showMsg('Ошибка сервера: ${response.statusCode}');
+      }
     } catch (e) {
       setState(() => _isLoading = false);
-      _showMsg('Ошибка поиска. Попробуй еще раз.');
+      _showMsg('Ошибка поиска: $e');
     }
   }
 
@@ -131,28 +146,15 @@ class _MainScreenState extends State<MainScreen> {
     });
   }
 
+  // Воспроизведение (пока играем демо-звук, так как MusicBrainz не хранит mp3)
   Future<void> _playTrack(dynamic track) async {
     try {
-      String? streamUrl;
-      for (String host in _apiHosts) {
-        try {
-          final url = Uri.parse('$host/v1/tracks/${track['id']}/stream?app_name=CosmoSound');
-          final response = await http.head(url).timeout(const Duration(seconds: 3));
-          if (response.statusCode == 200 || response.statusCode == 302) {
-            streamUrl = url.toString();
-            break;
-          }
-        } catch (e) {
-          continue;
-        }
-      }
-      
-      if (streamUrl != null) {
-        await _player.setUrl(streamUrl);
-        _player.play();
-      } else {
-        _showMsg('Не удалось найти рабочий сервер');
-      }
+      // Временная заглушка: играем короткий демо-трек, чтобы проверить работу плеера
+      // Позже ты сможешь заменить это на свои mp3
+      const demoUrl = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
+      await _player.setUrl(demoUrl);
+      _player.play();
+      _showMsg('Играет демо: ${track['title']}');
     } catch (e) {
       _showMsg('Ошибка воспроизведения: $e');
     }
@@ -258,7 +260,6 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // Боковое меню (Drawer) теперь вызывается изнутри страницы поиска
   Widget _buildDrawer() {
     return Drawer(
       child: ListView(
@@ -280,7 +281,7 @@ class _MainScreenState extends State<MainScreen> {
             leading: const Icon(Icons.palette),
             title: const Text('Оформление'),
             onTap: () {
-              Navigator.pop(context); // Закрываем меню
+              Navigator.pop(context);
               _showThemeDialog();
             },
           ),
@@ -365,7 +366,6 @@ class _MainScreenState extends State<MainScreen> {
     ];
 
     return Scaffold(
-      // Убрали общий drawer отсюда
       body: _pages[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
@@ -380,12 +380,10 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildSearchPage() {
-    // Возвращаем Scaffold с Drawer прямо здесь
     return Scaffold(
-      drawer: _buildDrawer(), // <-- ВОТ ТУТ МЕНЮ ДЛЯ ЭКРАНА ПОИСКА
+      drawer: _buildDrawer(),
       appBar: AppBar(
         title: const Text('CosmoSound 🚀'),
-        // Кнопку "три палочки" оставили
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
@@ -425,7 +423,7 @@ class _MainScreenState extends State<MainScreen> {
                       children: [
                         const Icon(Icons.music_note, size: 64, color: Colors.grey),
                         const SizedBox(height: 16),
-                        const Text('Популярное сейчас', style: TextStyle(fontSize: 18)),
+                        const Text('Популярное сейчас (MusicBrainz)', style: TextStyle(fontSize: 16)),
                         const SizedBox(height: 8),
                         ElevatedButton(
                           onPressed: _loadTrending,
@@ -441,7 +439,7 @@ class _MainScreenState extends State<MainScreen> {
                       final isFav = _favorites.any((t) => t['id'] == track['id']);
                       return ListTile(
                         title: Text(track['title'] ?? 'Без названия'),
-                        subtitle: Text(track['user']['name'] ?? 'Неизвестный'),
+                        subtitle: Text(track['artist'] ?? 'Неизвестный'),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -475,7 +473,7 @@ class _MainScreenState extends State<MainScreen> {
                 final track = _favorites[index];
                 return ListTile(
                   title: Text(track['title'] ?? 'Без названия'),
-                  subtitle: Text(track['user']['name'] ?? 'Неизвестный'),
+                  subtitle: Text(track['artist'] ?? 'Неизвестный'),
                   trailing: IconButton(
                     icon: const Icon(Icons.play_arrow),
                     onPressed: () => _playTrack(track),
@@ -504,7 +502,7 @@ class _MainScreenState extends State<MainScreen> {
                       final track = _favorites[index];
                       return ListTile(
                         title: Text(track['title'] ?? 'Без названия'),
-                        subtitle: Text(track['user']['name'] ?? 'Неизвестный'),
+                        subtitle: Text(track['artist'] ?? 'Неизвестный'),
                         trailing: const Icon(Icons.play_arrow),
                         onTap: () => _playTrack(track),
                       );
