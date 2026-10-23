@@ -3,16 +3,8 @@ import 'package:just_audio/just_audio.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Supabase.initialize(
-    url: 'https://bgzdbtouckpzwplbzhbn.supabase.co',
-    anonKey: 'sb_publishable_yHpdNA3ZD6XY-rjxCHCayQ_NIAUZz9q',
-  );
-  runApp(const CosmoSoundApp());
-}
+void main() => runApp(const CosmoSoundApp());
 
 class CosmoSoundApp extends StatelessWidget {
   const CosmoSoundApp({super.key});
@@ -25,113 +17,7 @@ class CosmoSoundApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple, brightness: Brightness.dark),
         useMaterial3: true,
       ),
-      home: const AuthGate(),
-    );
-  }
-}
-
-class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<AuthState>(
-      stream: Supabase.instance.client.auth.onAuthStateChange,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
-        final session = snapshot.data?.session;
-        if (session != null) {
-          return const MainScreen();
-        } else {
-          return const LoginScreen();
-        }
-      },
-    );
-  }
-}
-
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
-
-  @override
-  State<LoginScreen> createState() => _LoginScreenState();
-}
-
-class _LoginScreenState extends State<LoginScreen> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _isLoading = false;
-  bool _isSignUp = false;
-
-  Future<void> _handleAuth() async {
-    setState(() => _isLoading = true);
-    try {
-      if (_isSignUp) {
-        await Supabase.instance.client.auth.signUp(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
-        _showMsg('Аккаунт создан! Проверь почту.');
-      } else {
-        await Supabase.instance.client.auth.signInWithPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
-      }
-    } catch (e) {
-      _showMsg('Ошибка: $e');
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  void _showMsg(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.music_note, size: 80, color: Colors.deepPurple),
-              const SizedBox(height: 16),
-              Text(_isSignUp ? 'Регистрация в CosmoSound' : 'Вход в CosmoSound', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 32),
-              TextField(
-                controller: _emailController,
-                decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _passwordController,
-                decoration: const InputDecoration(labelText: 'Пароль', border: OutlineInputBorder()),
-                obscureText: true,
-              ),
-              const SizedBox(height: 24),
-              _isLoading 
-                  ? const CircularProgressIndicator()
-                  : ElevatedButton(
-                      onPressed: _handleAuth,
-                      style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
-                      child: Text(_isSignUp ? 'Зарегистрироваться' : 'Войти'),
-                    ),
-              TextButton(
-                onPressed: () => setState(() => _isSignUp = !_isSignUp),
-                child: Text(_isSignUp ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Зарегистрироваться'),
-              ),
-            ],
-          ),
-        ),
-      ),
+      home: const MainScreen(),
     );
   }
 }
@@ -372,15 +258,6 @@ class _MainScreenState extends State<MainScreen> {
                 applicationIcon: const Icon(Icons.music_note, size: 40),
                 children: const [Text('Твое космическое музыкальное пространство.')],
               );
-            },
-          ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.red),
-            title: const Text('Выйти', style: TextStyle(color: Colors.red)),
-            onTap: () async {
-              await Supabase.instance.client.auth.signOut();
-              Navigator.pop(context);
             },
           ),
         ],
