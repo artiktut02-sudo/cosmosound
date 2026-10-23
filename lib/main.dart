@@ -59,7 +59,6 @@ class _MainScreenState extends State<MainScreen> {
   final String _botUrl = 'https://t.me/your_bot_name'; 
   final String _channelUrl = 'https://t.me/your_channel_name';
 
-  // Список серверов для надежности
   final List<String> _apiHosts = [
     'https://discoveryprovider.audius.co',
     'https://discoveryprovider2.audius.co',
@@ -259,7 +258,6 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // Боковое меню (Drawer)
   Widget _buildDrawer() {
     return Drawer(
       child: ListView(
@@ -366,7 +364,7 @@ class _MainScreenState extends State<MainScreen> {
     ];
 
     return Scaffold(
-      drawer: _buildDrawer(), // Вот тут подключается меню
+      drawer: _buildDrawer(),
       body: _pages[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
@@ -384,7 +382,6 @@ class _MainScreenState extends State<MainScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('CosmoSound 🚀'),
-        // ВОТ ОНО! Добавляем иконку меню (три палочки) слева
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
@@ -513,7 +510,5 @@ class _MainScreenState extends State<MainScreen> {
               ],
             ),
     );
-  }
-}
   }
 }
