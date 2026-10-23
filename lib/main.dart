@@ -6,21 +6,41 @@ import 'package:url_launcher/url_launcher.dart';
 
 void main() => runApp(const CosmoSoundApp());
 
-class CosmoSoundApp extends StatelessWidget {
+class CosmoSoundApp extends StatefulWidget {
   const CosmoSoundApp({super.key});
+
+  @override
+  State<CosmoSoundApp> createState() => _CosmoSoundAppState();
+}
+
+class _CosmoSoundAppState extends State<CosmoSoundApp> {
+  // Выбранный цвет темы
+  Color _themeColor = Colors.deepPurple;
+
+  void _changeTheme(Color color) {
+    setState(() {
+      _themeColor = color;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'CosmoSound',
-      theme: ThemeData.dark(useMaterial3: true),
-      home: const MainScreen(),
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: _themeColor, brightness: Brightness.dark),
+        useMaterial3: true,
+      ),
+      home: MainScreen(onThemeChanged: _changeTheme, currentTheme: _themeColor),
     );
   }
 }
 
 class MainScreen extends StatefulWidget {
-  const MainScreen({super.key});
+  final Function(Color) onThemeChanged;
+  final Color currentTheme;
+
+  const MainScreen({super.key, required this.onThemeChanged, required this.currentTheme});
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -38,19 +58,17 @@ class _MainScreenState extends State<MainScreen> {
   bool _isAdmin = false; 
   
   final String _botUrl = 'https://t.me/your_bot_name'; 
+  final String _channelUrl = 'https://t.me/your_channel_name'; // Ссылка на твой канал
 
   @override
   void initState() {
     super.initState();
-    // Загружаем популярные треки сразу при запуске
     _loadTrending();
   }
 
-  // Загрузка популярных треков
   Future<void> _loadTrending() async {
     setState(() => _isLoading = true);
     final String apiHost = 'https://discoveryprovider.audius.co';
-    // Используем метод для получения трендов
     final url = Uri.parse('$apiHost/v1/tracks/trending?app_name=CosmoSound&limit=20');
 
     try {
@@ -224,6 +242,105 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  // Боковое меню (Drawer)
+  Widget _buildDrawer() {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          DrawerHeader(
+            decoration: BoxDecoration(color: widget.currentTheme.withOpacity(0.8)),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Icon(Icons.music_note, size: 48, color: Colors.white),
+                SizedBox(height: 8),
+                Text('CosmoSound', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.palette),
+            title: const Text('Оформление'),
+            onTap: () {
+              Navigator.pop(context); // Закрываем меню
+              _showThemeDialog();
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.send, color: Colors.blue),
+            title: const Text('Telegram проект'),
+            onTap: () async {
+              final url = Uri.parse(_channelUrl);
+              if (await canLaunchUrl(url)) {
+                await launchUrl(url);
+              }
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: const Text('О приложении'),
+            onTap: () {
+              Navigator.pop(context);
+              showAboutDialog(
+                context: context,
+                applicationName: 'CosmoSound',
+                applicationVersion: '1.0.0',
+                applicationIcon: const Icon(Icons.music_note, size: 40),
+                children: [
+                  const Text('Твое космическое музыкальное пространство. Слушай, лайкай и создавай свою вселенную.'),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Окно выбора цвета
+  void _showThemeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Выбери оформление'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildColorOption(Colors.deepPurple, 'Космос'),
+              _buildColorOption(Colors.cyan, 'Неон'),
+              _buildColorOption(Colors.redAccent, 'Кровавая луна'),
+              _buildColorOption(Colors.blue, 'Океан'),
+              _buildColorOption(Colors.green, 'Лес'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Закрыть'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildColorOption(Color color, String name) {
+    return ListTile(
+      leading: CircleAvatar(backgroundColor: color),
+      title: Text(name),
+      trailing: widget.currentTheme == color ? const Icon(Icons.check) : null,
+      onTap: () {
+        widget.onThemeChanged(color);
+        Navigator.pop(context);
+        _showMsg('Тема изменена на $name');
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final List<Widget> _pages = [
@@ -233,6 +350,7 @@ class _MainScreenState extends State<MainScreen> {
     ];
 
     return Scaffold(
+      drawer: _buildDrawer(), // Добавили боковое меню
       body: _pages[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
