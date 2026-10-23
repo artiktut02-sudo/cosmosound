@@ -31,7 +31,10 @@ class _MusicHomePageState extends State<MusicHomePage> {
   bool _isLoading = false;
 
   Future<void> _searchTracks(String query) async {
+    if (query.isEmpty) return;
     setState(() => _isLoading = true);
+    
+    // API Audius
     final String apiHost = 'https://discoveryprovider.audius.co';
     final url = Uri.parse('$apiHost/v1/tracks/search?query=$query&app_name=CosmoSound');
 
@@ -43,13 +46,25 @@ class _MusicHomePageState extends State<MusicHomePage> {
           _tracks = data['data'] ?? [];
           _isLoading = false;
         });
+        // Если пусто, показываем сообщение
+        if (_tracks.isEmpty) {
+          _showError('Ничего не найдено по запросу "$query"');
+        }
       } else {
         setState(() => _isLoading = false);
+        _showError('Ошибка сервера: ${response.statusCode}');
       }
     } catch (e) {
       setState(() => _isLoading = false);
-      debugPrint('Ошибка: $e');
+      _showError('Ошибка сети: $e');
     }
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
   }
 
   Future<void> _playTrack(String trackId) async {
@@ -59,7 +74,7 @@ class _MusicHomePageState extends State<MusicHomePage> {
       await _player.setUrl(url.toString());
       _player.play();
     } catch (e) {
-      debugPrint('Ошибка воспроизведения: $e');
+      _showError('Ошибка воспроизведения: $e');
     }
   }
 
@@ -79,20 +94,22 @@ class _MusicHomePageState extends State<MusicHomePage> {
               onSubmitted: _searchTracks,
             ),
           ),
-          if (_isLoading) const CircularProgressIndicator(),
+          if (_isLoading) const LinearProgressIndicator(),
           Expanded(
-            child: ListView.builder(
-              itemCount: _tracks.length,
-              itemBuilder: (context, index) {
-                final track = _tracks[index];
-                return ListTile(
-                  title: Text(track['title'] ?? 'Без названия'),
-                  subtitle: Text(track['user']['name'] ?? 'Неизвестный'),
-                  trailing: const Icon(Icons.play_arrow),
-                  onTap: () => _playTrack(track['id']),
-                );
-              },
-            ),
+            child: _tracks.isEmpty && !_isLoading
+                ? const Center(child: Text('Введите запрос и нажмите Enter'))
+                : ListView.builder(
+                    itemCount: _tracks.length,
+                    itemBuilder: (context, index) {
+                      final track = _tracks[index];
+                      return ListTile(
+                        title: Text(track['title'] ?? 'Без названия'),
+                        subtitle: Text(track['user']['name'] ?? 'Неизвестный'),
+                        trailing: const Icon(Icons.play_arrow),
+                        onTap: () => _playTrack(track['id']),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
