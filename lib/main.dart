@@ -35,10 +35,42 @@ class _MainScreenState extends State<MainScreen> {
   final AudioPlayer _player = AudioPlayer();
   
   bool _isPremium = false; 
-  bool _isAdmin = false; // Флаг админа
+  bool _isAdmin = false; 
   
-  // Ссылка на бота (пока заглушка)
   final String _botUrl = 'https://t.me/your_bot_name'; 
+
+  @override
+  void initState() {
+    super.initState();
+    // Загружаем популярные треки сразу при запуске
+    _loadTrending();
+  }
+
+  // Загрузка популярных треков
+  Future<void> _loadTrending() async {
+    setState(() => _isLoading = true);
+    final String apiHost = 'https://discoveryprovider.audius.co';
+    // Используем метод для получения трендов
+    final url = Uri.parse('$apiHost/v1/tracks/trending?app_name=CosmoSound&limit=20');
+
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          _searchTracks.clear();
+          _searchTracks.addAll(data['data'] ?? []);
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = false);
+        _showMsg('Ошибка сервера: ${response.statusCode}');
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showMsg('Ошибка сети: $e');
+    }
+  }
 
   Future<void> _search(String query) async {
     if (query.isEmpty) return;
@@ -94,7 +126,6 @@ class _MainScreenState extends State<MainScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  // Окно Премиума и ввода кодов
   void _showPremiumDialog() {
     final TextEditingController _codeController = TextEditingController();
 
@@ -137,18 +168,16 @@ class _MainScreenState extends State<MainScreen> {
               onPressed: () {
                 final input = _codeController.text.trim();
                 
-                // 1. СЕКРЕТНАЯ ПРОВЕРКА ДЛЯ АДМИНА
                 if (input == 'CosmoAdmin2077') {
                   setState(() {
                     _isAdmin = true;
-                    _isPremium = true; // Админу сразу даем премиум
+                    _isPremium = true; 
                   });
                   Navigator.pop(context);
                   _showAdminPanel();
                   return;
                 }
 
-                // 2. Обычный промокод
                 if (input == 'PROMO') {
                   setState(() => _isPremium = true);
                   Navigator.pop(context);
@@ -165,14 +194,13 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // Секретная панель администратора
   void _showAdminPanel() {
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
           title: const Text('Админ-панель 🔐'),
-          content: const Text('Добро пожаловать, Создатель. Здесь ты можешь управлять приложением.'),
+          content: const Text('Добро пожаловать, Создатель.'),
           actions: [
             TextButton(
               onPressed: () {
@@ -223,7 +251,7 @@ class _MainScreenState extends State<MainScreen> {
       appBar: AppBar(
         title: const Text('CosmoSound 🚀'),
         actions: [
-          if (_isAdmin) // Если введен админ-код, показываем значок щита
+          if (_isAdmin)
             const Padding(
               padding: EdgeInsets.all(8.0),
               child: Icon(Icons.security, color: Colors.green),
@@ -250,25 +278,18 @@ class _MainScreenState extends State<MainScreen> {
           Expanded(
             child: _searchTracks.isEmpty && !_isLoading
                 ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.music_note, size: 64, color: Colors.grey),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'Чтобы найти трек, напиши в поиск\nнапример:',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 16, color: Colors.grey),
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8,
-                            children: ['lofi', 'rock', 'jazz'].map((tag) => Chip(label: Text(tag))).toList(),
-                          ),
-                        ],
-                      ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.music_note, size: 64, color: Colors.grey),
+                        const SizedBox(height: 16),
+                        const Text('Популярное сейчас', style: TextStyle(fontSize: 18)),
+                        const SizedBox(height: 8),
+                        ElevatedButton(
+                          onPressed: _loadTrending,
+                          child: const Text('Обновить'),
+                        ),
+                      ],
                     ),
                   )
                 : ListView.builder(
