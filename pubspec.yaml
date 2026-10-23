@@ -10,7 +10,6 @@ dependencies:
   flutter:
     sdk: flutter
   just_audio: ^0.9.40
-  http: ^1.2.0
   url_launcher: ^6.2.5
 
 flutter:
