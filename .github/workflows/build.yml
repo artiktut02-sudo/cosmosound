@@ -25,6 +25,9 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Create Android project
+        run: flutter create . --platforms android
+
       - name: Install dependencies
         run: flutter pub get
 
