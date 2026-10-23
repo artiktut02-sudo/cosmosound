@@ -14,23 +14,15 @@ void main() async {
   runApp(const CosmoSoundApp());
 }
 
-class CosmoSoundApp extends StatefulWidget {
+class CosmoSoundApp extends StatelessWidget {
   const CosmoSoundApp({super.key});
-
-  @override
-  State<CosmoSoundApp> createState() => _CosmoSoundAppState();
-}
-
-class _CosmoSoundAppState extends State<CosmoSoundApp> {
-  Color _themeColor = Colors.deepPurple;
-  void _changeTheme(Color color) { setState(() { _themeColor = color; }); }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'CosmoSound',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: _themeColor, brightness: Brightness.dark),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple, brightness: Brightness.dark),
         useMaterial3: true,
       ),
       home: const AuthGate(),
@@ -96,6 +88,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showMsg(String msg) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
@@ -346,9 +339,9 @@ class _MainScreenState extends State<MainScreen> {
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
-          DrawerHeader(
-            decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withOpacity(0.8)),
-            child: const Column(
+          const DrawerHeader(
+            decoration: BoxDecoration(color: Colors.deepPurple),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -357,11 +350,6 @@ class _MainScreenState extends State<MainScreen> {
                 Text('CosmoSound', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
               ],
             ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.palette),
-            title: const Text('Оформление'),
-            onTap: () { Navigator.pop(context); _showThemeDialog(); },
           ),
           const Divider(),
           ListTile(
@@ -397,41 +385,6 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  void _showThemeDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Выбери оформление'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildColorOption(Colors.deepPurple, 'Космос'),
-              _buildColorOption(Colors.cyan, 'Неон'),
-              _buildColorOption(Colors.redAccent, 'Кровавая луна'),
-              _buildColorOption(Colors.blue, 'Океан'),
-              _buildColorOption(Colors.green, 'Лес'),
-            ],
-          ),
-          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Закрыть'))],
-        );
-      },
-    );
-  }
-
-  Widget _buildColorOption(Color color, String name) {
-    return ListTile(
-      leading: CircleAvatar(backgroundColor: color),
-      title: Text(name),
-      trailing: widget.currentTheme == color ? const Icon(Icons.check) : null,
-      onTap: () {
-        _changeTheme(color);
-        Navigator.pop(context);
-        _showMsg('Тема изменена на $name');
-      },
     );
   }
 
