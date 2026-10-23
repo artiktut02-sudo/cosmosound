@@ -34,10 +34,10 @@ class _MainScreenState extends State<MainScreen> {
   bool _isLoading = false;
   final AudioPlayer _player = AudioPlayer();
   
-  // Флаг премиум-подписки (пока хранится только в памяти)
   bool _isPremium = false; 
-
-  // Ссылка на твоего бота (пока заглушка)
+  bool _isAdmin = false; // Флаг админа
+  
+  // Ссылка на бота (пока заглушка)
   final String _botUrl = 'https://t.me/your_bot_name'; 
 
   Future<void> _search(String query) async {
@@ -79,7 +79,6 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<void> _playTrack(dynamic track) async {
-    // Здесь в будущем можно добавить проверку: если _isPremium == false, то включать счетчик треков
     try {
       final String apiHost = 'https://discoveryprovider.audius.co';
       final url = Uri.parse('$apiHost/v1/tracks/${track['id']}/stream?app_name=CosmoSound');
@@ -95,7 +94,7 @@ class _MainScreenState extends State<MainScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  // Окно покупки Премиума
+  // Окно Премиума и ввода кодов
   void _showPremiumDialog() {
     final TextEditingController _codeController = TextEditingController();
 
@@ -136,7 +135,21 @@ class _MainScreenState extends State<MainScreen> {
             ),
             TextButton(
               onPressed: () {
-                if (_codeController.text.trim().toUpperCase() == 'PROMO') {
+                final input = _codeController.text.trim();
+                
+                // 1. СЕКРЕТНАЯ ПРОВЕРКА ДЛЯ АДМИНА
+                if (input == 'CosmoAdmin2077') {
+                  setState(() {
+                    _isAdmin = true;
+                    _isPremium = true; // Админу сразу даем премиум
+                  });
+                  Navigator.pop(context);
+                  _showAdminPanel();
+                  return;
+                }
+
+                // 2. Обычный промокод
+                if (input == 'PROMO') {
                   setState(() => _isPremium = true);
                   Navigator.pop(context);
                   _showMsg('Премиум активирован! 👑');
@@ -145,6 +158,37 @@ class _MainScreenState extends State<MainScreen> {
                 }
               },
               child: const Text('Активировать'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Секретная панель администратора
+  void _showAdminPanel() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Админ-панель 🔐'),
+          content: const Text('Добро пожаловать, Создатель. Здесь ты можешь управлять приложением.'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  _favorites.clear();
+                  _searchTracks.clear();
+                  _isPremium = true;
+                });
+                Navigator.pop(context);
+                _showMsg('Все данные сброшены, Премиум включен!');
+              },
+              child: const Text('Сбросить всё + Включить Премиум'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Закрыть'),
             ),
           ],
         );
@@ -179,7 +223,11 @@ class _MainScreenState extends State<MainScreen> {
       appBar: AppBar(
         title: const Text('CosmoSound 🚀'),
         actions: [
-          // Кнопка премиума в шапке
+          if (_isAdmin) // Если введен админ-код, показываем значок щита
+            const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Icon(Icons.security, color: Colors.green),
+            ),
           IconButton(
             icon: Icon(_isPremium ? Icons.workspace_premium : Icons.star_border, color: _isPremium ? Colors.amber : null),
             onPressed: _showPremiumDialog,
