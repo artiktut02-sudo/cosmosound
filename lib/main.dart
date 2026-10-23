@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:url_launcher/url_launcher.dart';
 
 void main() => runApp(const CosmoSoundApp());
 
@@ -18,7 +19,6 @@ class CosmoSoundApp extends StatelessWidget {
   }
 }
 
-// Главный экран с нижней навигацией
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
@@ -33,6 +33,12 @@ class _MainScreenState extends State<MainScreen> {
   final List<dynamic> _favorites = [];
   bool _isLoading = false;
   final AudioPlayer _player = AudioPlayer();
+  
+  // Флаг премиум-подписки (пока хранится только в памяти)
+  bool _isPremium = false; 
+
+  // Ссылка на твоего бота (пока заглушка)
+  final String _botUrl = 'https://t.me/your_bot_name'; 
 
   Future<void> _search(String query) async {
     if (query.isEmpty) return;
@@ -73,6 +79,7 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<void> _playTrack(dynamic track) async {
+    // Здесь в будущем можно добавить проверку: если _isPremium == false, то включать счетчик треков
     try {
       final String apiHost = 'https://discoveryprovider.audius.co';
       final url = Uri.parse('$apiHost/v1/tracks/${track['id']}/stream?app_name=CosmoSound');
@@ -86,6 +93,63 @@ class _MainScreenState extends State<MainScreen> {
   void _showMsg(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  // Окно покупки Премиума
+  void _showPremiumDialog() {
+    final TextEditingController _codeController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('CosmoSound Premium 👑'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Слушай без ограничений и поддержи проект!'),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final url = Uri.parse(_botUrl);
+                  if (await canLaunchUrl(url)) {
+                    await launchUrl(url);
+                  } else {
+                    _showMsg('Не удалось открыть Telegram');
+                  }
+                },
+                icon: const Icon(Icons.send),
+                label: const Text('Купить в Telegram'),
+              ),
+              const SizedBox(height: 16),
+              const Text('Уже купил? Введи код:'),
+              TextField(
+                controller: _codeController,
+                decoration: const InputDecoration(hintText: 'Твой код'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (_codeController.text.trim().toUpperCase() == 'PROMO') {
+                  setState(() => _isPremium = true);
+                  Navigator.pop(context);
+                  _showMsg('Премиум активирован! 👑');
+                } else {
+                  _showMsg('Неверный код');
+                }
+              },
+              child: const Text('Активировать'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -110,10 +174,18 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // Вкладка "Поиск" (с приветственным экраном)
   Widget _buildSearchPage() {
     return Scaffold(
-      appBar: AppBar(title: const Text('CosmoSound 🚀')),
+      appBar: AppBar(
+        title: const Text('CosmoSound 🚀'),
+        actions: [
+          // Кнопка премиума в шапке
+          IconButton(
+            icon: Icon(_isPremium ? Icons.workspace_premium : Icons.star_border, color: _isPremium ? Colors.amber : null),
+            onPressed: _showPremiumDialog,
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
@@ -181,7 +253,6 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // Вкладка "Избранное"
   Widget _buildFavoritesPage() {
     return Scaffold(
       appBar: AppBar(title: const Text('Избранное ❤️')),
@@ -204,7 +275,6 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // Вкладка "Моя вселенная"
   Widget _buildUniversePage() {
     return Scaffold(
       appBar: AppBar(title: const Text('Моя вселенная 🌌')),
